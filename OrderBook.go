@@ -13,6 +13,7 @@ import (
 )
 
 var minTotal = float64(0.00060000)
+var satoshi = float64(0.00000001)
 
 /**
 * Loop the order book limit to 8 markets per second
@@ -165,7 +166,7 @@ func periodicGetOrderBook(t time.Time, markets []string)  {
 				/*Spread := orderBook.Sell[0].Rate - orderBook.Buy[0].Rate
 				Spread = Spread * 100000000
 				Spread := (((orderBook.Sell[0].Rate - orderBook.Buy[0].Rate) / orderBook.Sell[0].Rate)* 10) + 1*/
-				Spread := (orderBook.Sell[0].Rate - orderBook.Buy[0].Rate) / orderBook.Sell[0].Rate
+				Spread := ((orderBook.Sell[0].Rate - orderBook.Buy[0].Rate) - 2*satoshi) / orderBook.Sell[0].Rate
 				MMPB.Lock.Lock()
 				MPB := MMPB.Markets[markets[i]]
 				MMPB.Lock.Unlock()

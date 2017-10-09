@@ -16,7 +16,9 @@ import (
 
 var mydb db.Mydbset
 var BTCMarkets []string
-var BTCHourlyMarket map[string]*db.RateWithLock
+var MyOwnWallet map[string]*OwnWallet
+var MarketOrder map[string]*MarketOrderDetail
+//var BTCHourlyMarket map[string]*db.RateWithLock
 
 // Receives the change in the number of goroutines
 var JobChannel = make(chan time.Time)
@@ -26,37 +28,38 @@ type ForSecondMarket struct {
 	Lock sync.Mutex
 }
 
+type OwnWallet struct{
+	Wallet bittrex.Balance
+	Lock sync.Mutex
+}
 
 type MarketMPB struct {
 	Markets map[string]float64
 	Lock sync.Mutex
 }
 
+type MarketOrderDetail struct {
+	BuyOrderUUID string
+	SellOrderUUID string
+	Opening	bool
+}
+
+
 var thisSM ForSecondMarket
 var lastSM ForSecondMarket
 var MMPB MarketMPB
 var fee float64 = 0.0025
 
-func updateWallet(){
+func SetupWallet(){
 	bAPI := bittrex.New(API_KEY, API_SECRET)
 	wallet, err := bAPI.GetBalances()
 	if err!=nil{
-		fmt.Println("Update Wallet -API ", time.Now(), err)
+		fmt.Println("Setup Wallet -API ", time.Now(), err)
 	}
-
-	session := mydb.Session.Clone()
-	defer session.Close()
-	c := session.DB("v2").C("WalletBalance").With(session)
-	c.DropCollection()
 
 	for _, v := range wallet{
-		err := c.Insert(&v)
-		if err != nil{
-			e := session.DB("v2").C("ErrorLog").With(session)
-			e.Insert(&db.ErrorLog{Description:"Update Wallet in DB", Error:err.Error(), Time:time.Now()})
-		}
+		MyOwnWallet[v.Currency]= &OwnWallet{Wallet:v}
 	}
-
 
 }
 
@@ -79,35 +82,28 @@ func logWallet(){
 
 	session := mydb.Session.Clone()
 	defer session.Close()
-	c := session.DB("v2").C("WalletBalance").With(session)
-	var WalletBalances []bittrex.Balance
+
 	estBTCRate := float64(0)
-	err := c.Find(bson.M{"balance" : bson.M{"$gt":0}}).All(&WalletBalances)
 
-	if err != nil{
-		e := session.DB("v2").C("ErrorLog").With(session)
-		e.Insert(&db.ErrorLog{Description:"Find balance Wallet in DB", Error:err.Error(), Time:time.Now()})
-	}else {
-		for _, v:= range WalletBalances{
-			if v.Currency != "BTC"{
-				marketName := "BTC-" + v.Currency
-				thisSM.Lock.Lock()
-				estBTCRate += v.Balance * thisSM.Markets[marketName].Last
-				thisSM.Lock.Unlock()
-			}else {
-				estBTCRate += v.Balance
-			}
-
-		}
-		d := session.DB("v2").C("LogEstBTC").With(session)
-		err2 := d.Insert(&logForBTC{LogTime:time.Now(), EstBTC:estBTCRate})
-		if err2 != nil {
-			e := session.DB("v2").C("ErrorLog").With(session)
-			e.Insert(&db.ErrorLog{Description:"Insert EST BTC balance in DB", Error:err.Error(), Time:time.Now()})
+	for _, v:= range MyOwnWallet{
+		v.Lock.Lock()
+		defer v.Lock.Unlock()
+		if v.Wallet.Currency != "BTC"{
+			marketName := "BTC-" + v.Wallet.Currency
+			thisSM.Lock.Lock()
+			estBTCRate += v.Wallet.Balance * thisSM.Markets[marketName].Last
+			thisSM.Lock.Unlock()
+		}else {
+			estBTCRate += v.Wallet.Balance
 		}
 
 	}
-
+	d := session.DB("v2").C("LogEstBTC").With(session)
+	err := d.Insert(&logForBTC{LogTime:time.Now(), EstBTC:estBTCRate})
+	if err != nil {
+		e := session.DB("v2").C("ErrorLog").With(session)
+		e.Insert(&db.ErrorLog{Description:"Insert EST BTC balance in DB", Error:err.Error(), Time:time.Now()})
+	}
 
 
 
@@ -129,23 +125,10 @@ func  refreshWallet()(result bool){
 	}
 
 
-	c := session.DB("v2").C("WalletBalance").With(session)
 	for _,v := range wallet{
-		err2 := c.Update(bson.M{"currency":v.Currency}, bson.M{"$set" :bson.M{"balance":v.Balance, "available":v.Available}})
-		if err2 != nil && err2.Error() != "not found"{
-			e := session.DB("v2").C("ErrorLog").With(session)
-			e.Insert(&db.ErrorLog{Description:"Update wallet ", Error:err2.Error(), Time:time.Now()})
-			result = false
-			return
-		} else if err2!= nil && err2.Error() == "not found"{
-			err3 := c.Insert(&v)
-			if err3 != nil {
-				e := session.DB("v2").C("ErrorLog").With(session)
-				e.Insert(&db.ErrorLog{Description: "Insert non exists wallet ", Error: err3.Error(), Time: time.Now()})
-				result = false
-				return
-			}
-		}
+		MyOwnWallet[v.Currency].Lock.Lock()
+		defer MyOwnWallet[v.Currency].Lock.Unlock()
+		MyOwnWallet[v.Currency].Wallet = v
 	}
 
 	return
@@ -154,43 +137,65 @@ func  refreshWallet()(result bool){
 /**
  * Used to refresh the available markets in bittrex, once per program should good enough
  */
-func refreshMarkets(){
+func SetupMarkets(){
 	bAPI := bittrex.New(API_KEY, API_SECRET)
-	session := mydb.Session.Clone()
-	defer session.Close()
+
 	markets, err := bAPI.GetMarkets()
 	if err != nil {
-
+		session := mydb.Session.Clone()
+		defer session.Close()
 		e := session.DB("v2").C("ErrorLog").With(session)
-		e.Insert(&db.ErrorLog{Description:"refreshMarkets  - API", Error:err.Error(), Time:time.Now()})
+		e.Insert(&db.ErrorLog{Description:"SetupMarkets  - API", Error:err.Error(), Time:time.Now()})
 
-	}
+	}else{
+		for _,v := range markets {
+			if v.BaseCurrency == "BTC"{
+				BTCMarkets = append(BTCMarkets, v.MarketName)
 
-	i := 0
-	for _,v := range markets {
-		if v.BaseCurrency == "BTC"{
-			BTCMarkets = append(BTCMarkets, v.MarketName)
+				/*		var temp db.RateWithMarketName
+						h := session.DB("v2").C("LogHourly").With(session)
 
-			var temp db.RateWithMarketName
-			h := session.DB("v2").C("LogHourly").With(session)
+						err2 := h.Find(bson.M{"marketname":v.MarketName}).One(&temp)
 
-			err2 := h.Find(bson.M{"marketname":v.MarketName}).One(&temp)
 
-			
-			if err2 != nil && err2.Error() == "not found"{
-				BTCHourlyMarket[v.MarketName] = &db.RateWithLock{}
-				BTCHourlyMarket[v.MarketName].HMR.New()
-				h.Insert(&db.RateWithMarketName{MarketName:v.MarketName, HMR:BTCHourlyMarket[v.MarketName].HMR})
-			} else if err2 == nil{
-				BTCHourlyMarket[v.MarketName] = &db.RateWithLock{HMR:temp.HMR}
-			} else if err2 != nil{
-				e := session.DB("v2").C("ErrorLog").With(session)
-				e.Insert(&db.ErrorLog{Description:"Get Hourly Rate From DB", Error:err2.Error(), Time:time.Now()})
+						if err2 != nil && err2.Error() == "not found"{
+							BTCHourlyMarket[v.MarketName] = &db.RateWithLock{}
+							BTCHourlyMarket[v.MarketName].HMR.New()
+							h.Insert(&db.RateWithMarketName{MarketName:v.MarketName, HMR:BTCHourlyMarket[v.MarketName].HMR})
+						} else if err2 == nil{
+							BTCHourlyMarket[v.MarketName] = &db.RateWithLock{HMR:temp.HMR}
+						} else if err2 != nil{
+							e := session.DB("v2").C("ErrorLog").With(session)
+							e.Insert(&db.ErrorLog{Description:"Get Hourly Rate From DB", Error:err2.Error(), Time:time.Now()})
+						}
+			*/
+
 			}
-
-			i++
 		}
 	}
+
+}
+
+func SetupOpeningOrder()  {
+	bAPI := bittrex.New(API_KEY, API_SECRET)
+	orders, err:= bAPI.GetOpenOrders("all")
+	if err != nil {
+		session := mydb.Session.Clone()
+		defer session.Close()
+		e := session.DB("v2").C("ErrorLog").With(session)
+		e.Insert(&db.ErrorLog{Description:"SetupOpeningOrder  - API", Error:err.Error(), Time:time.Now()})
+	}else {
+		for _,v := range orders {
+			MarketOrder[v.Exchange] = &MarketOrderDetail{Opening:true}
+			if v.OrderType == "LIMIT_BUY" {
+				MarketOrder[v.Exchange].BuyOrderUUID = v.OrderUuid
+			}else{
+				MarketOrder[v.Exchange].SellOrderUUID = v.OrderUuid
+			}
+		}
+
+	}
+
 }
 
 func main() {
@@ -200,7 +205,10 @@ func main() {
 	thisSM.Markets = make(map[string]bittrex.MarketSummary)
 	lastSM.Markets = make(map[string]bittrex.MarketSummary)
 	MMPB.Markets = make(map[string]float64)
-	BTCHourlyMarket = make(map[string]*db.RateWithLock)
+	MyOwnWallet = make(map[string]*OwnWallet)
+	MarketOrder = make(map[string]*MarketOrderDetail)
+
+	//BTCHourlyMarket = make(map[string]*db.RateWithLock)
 	// Bittrex client
 	//bAPI := bittrex.New(API_KEY, API_SECRET)
 
@@ -208,9 +216,9 @@ func main() {
 	/*balances, err := bAPI.GetTicker("BTC-LTC")
 	fmt.Println(time.Now(),err, balances)*/
 
-	refreshMarkets()
-	updateWallet()
-
+	SetupMarkets()
+	SetupWallet()
+	SetupOpeningOrder()
 
 	/* Code for listen Ctrl + C to stop the bot*/
 	cc := make(chan os.Signal, 1)
@@ -228,6 +236,8 @@ func main() {
 
 	/* async call a job to get summaries */
 	go loopLogWallet()
+
+
 
 	go loopGetSummary()
 

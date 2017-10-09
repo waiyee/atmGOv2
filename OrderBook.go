@@ -180,7 +180,7 @@ func periodicGetOrderBook(t time.Time, markets []string)  {
 				Bid: orderBook.Buy[0].Rate, Ask: orderBook.Sell[0].Rate, Voi:VOI, Oir:OIR, SPREAD:Spread, Mpb: MPB, Final:final, USDT: thisSM.Markets["USDT-BTC"].Last})
 				thisSM.Lock.Unlock()
 
-				h := session.DB("v2").C("LogHourly").With(session)
+				/*h := session.DB("v2").C("LogHourly").With(session)
 				BTCHourlyMarket[markets[i]].Lock.Lock()
 				BTCHourlyMarket[markets[i]].HMR.InsertLog(orderBook.Buy[0].Rate, orderBook.Sell[0].Rate, final)
 
@@ -196,14 +196,14 @@ func periodicGetOrderBook(t time.Time, markets []string)  {
 					BTCHourlyMarket[markets[i]].MaxAsk,BTCHourlyMarket[markets[i]].MaxBid,BTCHourlyMarket[markets[i]].MaxFinal,
 					BTCHourlyMarket[markets[i]].MinAsk,BTCHourlyMarket[markets[i]].MinBid,BTCHourlyMarket[markets[i]].MinFinal,
 					BTCHourlyMarket[markets[i]].LastAsk,BTCHourlyMarket[markets[i]].LastBid,BTCHourlyMarket[markets[i]].LastFinal,
-					)*/
-				BTCHourlyMarket[markets[i]].Lock.Unlock()
+					)
+				BTCHourlyMarket[markets[i]].Lock.Unlock()*/
 				if err!= nil{
 					e := session.DB("v2").C("ErrorLog").With(session)
 					e.Insert(&db.ErrorLog{Description:"Get Market Balance in DB", Error:err.Error(), Time:time.Now()})
 				}
 
-				d := session.DB("v2").C("WalletBalance").With(session)
+			/*	d := session.DB("v2").C("WalletBalance").With(session)
 				var MarketBalance WalletBalance
 				err = d.Find(bson.M{
 					"currency" : strings.Split(markets[i], "-")[1],
@@ -229,13 +229,18 @@ func periodicGetOrderBook(t time.Time, markets []string)  {
 					e.Insert(&db.ErrorLog{Description:"Get BTC Balance in DB", Error:err.Error(), Time:time.Now()})
 				}
 
-
-
-
-
+*/
 				//fmt.Printf("Market %v Final %f MarketBTC %f minSellRate %f \n", markets[i], final, MarketBTCEST, minSellRate)
 
+				FinalThresold := 0.4
+				SpreadThresold := 0.005
+				var temp bittrex.Balance
+				if val , ok := MyOwnWallet[strings.Split(markets[i], "-")[1]]; ok{
+					temp = val.Wallet
+				}
+				if final > FinalThresold && Spread > SpreadThresold && temp.Available == 0 {
 
+				}
 
 
 			}

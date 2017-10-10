@@ -10,7 +10,7 @@ import (
 	"sync"
 	"atm/db"
 
-	"gopkg.in/mgo.v2/bson"
+
 )
 
 
@@ -18,6 +18,7 @@ var mydb db.Mydbset
 var BTCMarkets []string
 var MyOwnWallet map[string]*OwnWallet
 var MarketOrder map[string]*MarketOrderDetail
+var MF map[string]*MarketFinal
 //var BTCHourlyMarket map[string]*db.RateWithLock
 
 // Receives the change in the number of goroutines
@@ -41,7 +42,14 @@ type MarketMPB struct {
 type MarketOrderDetail struct {
 	BuyOrderUUID string
 	SellOrderUUID string
-	Opening	bool
+	BuyOpening	bool
+	SellOpening	bool
+	Lock sync.Mutex
+}
+
+type MarketFinal struct{
+	Lock sync.Mutex
+	Final float64
 }
 
 
@@ -49,6 +57,7 @@ var thisSM ForSecondMarket
 var lastSM ForSecondMarket
 var MMPB MarketMPB
 var fee float64 = 0.0025
+
 
 func SetupWallet(){
 	bAPI := bittrex.New(API_KEY, API_SECRET)
@@ -151,7 +160,8 @@ func SetupMarkets(){
 		for _,v := range markets {
 			if v.BaseCurrency == "BTC"{
 				BTCMarkets = append(BTCMarkets, v.MarketName)
-
+				MarketOrder[v.MarketName] = &MarketOrderDetail{BuyOpening:false, SellOpening:false}
+				MF[v.MarketName] = &MarketFinal{Final:0}
 				/*		var temp db.RateWithMarketName
 						h := session.DB("v2").C("LogHourly").With(session)
 
@@ -186,17 +196,50 @@ func SetupOpeningOrder()  {
 		e.Insert(&db.ErrorLog{Description:"SetupOpeningOrder  - API", Error:err.Error(), Time:time.Now()})
 	}else {
 		for _,v := range orders {
-			MarketOrder[v.Exchange] = &MarketOrderDetail{Opening:true}
+
 			if v.OrderType == "LIMIT_BUY" {
 				MarketOrder[v.Exchange].BuyOrderUUID = v.OrderUuid
+				MarketOrder[v.Exchange].BuyOpening = true
 			}else{
 				MarketOrder[v.Exchange].SellOrderUUID = v.OrderUuid
+				MarketOrder[v.Exchange].SellOpening = true
 			}
 		}
 
 	}
 
 }
+/*
+func looptest(){
+	bAPI := bittrex.New(API_KEY, API_SECRET)
+	uuid , err := bAPI.SellLimit("BTC-TKS", 0.03054342,0.9)
+	if err != nil {
+		session := mydb.Session.Clone()
+		defer session.Close()
+		e := session.DB("v3").C("ErrorLog").With(session)
+		e.Insert(&db.ErrorLog{Description:"looptest  - API", Error:err.Error(), Time:time.Now()})
+	}else {
+		for t := range time.NewTicker(time.Millisecond * 50).C {
+			go func() {
+				g , err2 := bAPI.GetOrder(uuid)
+				if err2 != nil {
+					session := mydb.Session.Clone()
+					defer session.Close()
+					e := session.DB("v3").C("ErrorLog").With(session)
+					e.Insert(&db.ErrorLog{Description:"looptest getorder  - API", Error:err2.Error(), Time:time.Now()})
+				}else {
+					session := mydb.Session.Clone()
+					defer session.Close()
+					e := session.DB("v3").C("t").With(session)
+					e.Insert(&g)
+				}
+
+			}()
+
+			JobChannel <- t
+		}
+	}
+}*/
 
 func main() {
 
@@ -205,6 +248,7 @@ func main() {
 	thisSM.Markets = make(map[string]bittrex.MarketSummary)
 	lastSM.Markets = make(map[string]bittrex.MarketSummary)
 	MMPB.Markets = make(map[string]float64)
+	MF = make(map[string]*MarketFinal)
 	MyOwnWallet = make(map[string]*OwnWallet)
 	MarketOrder = make(map[string]*MarketOrderDetail)
 
@@ -233,7 +277,7 @@ func main() {
 
 	}()
 	/* Code for listen Ctrl + C to stop the bot*/
-
+	//go looptest()
 	/* async call a job to get summaries */
 	go loopLogWallet()
 
@@ -243,7 +287,7 @@ func main() {
 
 	go loopGetOrderBook()
 
-	go refreshOrder()
+	//go refreshOrder()
 
 
 

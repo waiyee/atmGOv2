@@ -2,19 +2,19 @@ package main
 
 import (
 	"time"
-	"fmt"
+
 	"sync"
 	"atm/bittrex"
 
 	"atm/db"
-	"atm/tradeHelper"
-	"gopkg.in/mgo.v2/bson"
+
 	"strings"
 )
 
 var minTotal = float64(0.00060000)
 var satoshi = float64(0.00000001)
-
+var FinalThresold = 0.4
+var SpreadThresold = 0.005
 /**
 * Loop the order book limit to 8 markets per second
  */
@@ -173,6 +173,10 @@ func periodicGetOrderBook(t time.Time, markets []string)  {
 				/*final := (VOI / Spread) + (OIR / Spread ) + (MPB / Spread)*/
 				final := VOI + OIR + MPB
 
+				MF[markets[i]].Lock.Lock()
+				MF[markets[i]].Final = final
+				MF[markets[i]].Lock.Unlock()
+
 				//c := session.DB("v2").C("OwnOrderBook").With(session)
 				f := session.DB("v2").C("LogMarketFinal").With(session)
 				thisSM.Lock.Lock()
@@ -232,14 +236,15 @@ func periodicGetOrderBook(t time.Time, markets []string)  {
 */
 				//fmt.Printf("Market %v Final %f MarketBTC %f minSellRate %f \n", markets[i], final, MarketBTCEST, minSellRate)
 
-				FinalThresold := 0.4
-				SpreadThresold := 0.005
+
 				var temp bittrex.Balance
 				if val , ok := MyOwnWallet[strings.Split(markets[i], "-")[1]]; ok{
 					temp = val.Wallet
 				}
-				if final > FinalThresold && Spread > SpreadThresold && temp.Available == 0 {
-
+				MyOwnWallet["BTC"].Lock.Lock()
+				defer MyOwnWallet["BTC"].Lock.Unlock()
+				if final > FinalThresold && Spread > SpreadThresold && temp.Available == 0 && MyOwnWallet["BTC"].Wallet.Available >= minTotal && !MarketOrder[markets[i]].BuyOpening {
+					go BuySellMarkets(markets[i], orderBook.Buy[0].Rate + satoshi , orderBook.Sell[0].Rate - satoshi)
 				}
 
 
@@ -252,12 +257,153 @@ func periodicGetOrderBook(t time.Time, markets []string)  {
 
 	wg.Wait()
 
-
 }
 
 
 
-func refreshOrder(){
+func BuySellMarkets(market string, bidPrice float64, askPrice float64)  {
+	bapi := bittrex.New(API_KEY, API_SECRET)
+	betSize := minTotal
+	rate := bidPrice
+	quantity := (betSize * (1-fee)) / rate
+	// buy order
+	Buyuuid , errB := bapi.BuyLimit(market, quantity, rate)
+
+	if errB != nil{
+		session := mydb.Session.Clone()
+		defer session.Close()
+		e := session.DB("v2").C("ErrorLog").With(session)
+		e.Insert(&db.ErrorLog{Description:"Buy Limit API - ", Error:errB.Error(), Time:time.Now()})
+	}else{
+		// buying=true
+		MarketOrder[market].BuyOrderUUID = Buyuuid
+		MarketOrder[market].BuyOpening = true
+
+		for range time.NewTicker(time.Millisecond * 50).C {
+			CheckOrder(MarketOrder[market].BuyOrderUUID)
+			if !MarketOrder[market].BuyOpening{
+				// Buy filled = > sell order
+				MyOwnWallet[strings.Split(market, "-")[1]].Lock.Lock()
+				defer MyOwnWallet[strings.Split(market, "-")[1]].Lock.Unlock()
+				Selluuid, errS := bapi.SellLimit(market, MyOwnWallet[strings.Split(market, "-")[1]].Wallet.Available, askPrice)
+				if errS != nil{
+					session := mydb.Session.Clone()
+					defer session.Close()
+					e := session.DB("v2").C("ErrorLog").With(session)
+					e.Insert(&db.ErrorLog{Description:"Sell Limit API - ", Error:errS.Error(), Time:time.Now()})
+				}else {
+					// selling = true
+					MarketOrder[market].SellOrderUUID = Selluuid
+					MarketOrder[market].SellOpening = true
+
+				}
+				break
+			}else{
+				// not yet fill
+				ticker, err2:=bapi.GetTicker(market)
+				if err2 != nil{
+					session := mydb.Session.Clone()
+					defer session.Close()
+					e := session.DB("v2").C("ErrorLog").With(session)
+					e.Insert(&db.ErrorLog{Description:"Get Ticker API - ", Error:err2.Error(), Time:time.Now()})
+				}else{
+					if ticker.Bid > bidPrice{
+						//cancel order
+						err3 := bapi.CancelOrder(MarketOrder[market].BuyOrderUUID )
+						if err3 != nil{
+							session := mydb.Session.Clone()
+							defer session.Close()
+							e := session.DB("v2").C("ErrorLog").With(session)
+							e.Insert(&db.ErrorLog{Description:"Cancel Order API - ", Error:err3.Error(), Time:time.Now()})
+						}else{
+							MarketOrder[market].BuyOpening = false
+							break
+						}
+
+					}
+				}
+			}
+		}
+
+
+		// check selling status
+		if MarketOrder[market].SellOpening{
+			for range time.NewTicker(time.Millisecond * 50).C {
+				ot := CheckOrder(MarketOrder[market].SellOrderUUID)
+				if time.Now().Sub(ot).Minutes() > 24*60 {
+					// time up
+				} else if!MarketOrder[market].SellOpening{
+					// sold !
+				} else {
+					// not yet fill
+				}
+
+			}
+		}
+
+	}
+}
+
+func CheckOrder(uuid string)(orderTime time.Time){
+
+	bapi := bittrex.New(API_KEY, API_SECRET)
+	order, err := bapi.GetOrder(uuid)
+	if err != nil{
+		session := mydb.Session.Clone()
+		defer session.Close()
+		e := session.DB("v2").C("ErrorLog").With(session)
+		e.Insert(&db.ErrorLog{Description:"Check Order API - ", Error:err.Error(), Time:time.Now()})
+	}else {
+		a := strings.Split(order.Opened, ".")
+		var LayoutLenMill string
+		if len(a) > 1 {
+			millise := len(a[1])
+			LayoutLenMill = "."
+			for i := 0; i < millise; i++ {
+				LayoutLenMill += "0"
+			}
+		}
+		t, err2 := time.Parse("2006-01-02T15:04:05" + LayoutLenMill, order.Opened)
+		if err2 != nil {
+			session := mydb.Session.Clone()
+			defer session.Close()
+			e := session.DB("v2").C("ErrorLog").With(session)
+			e.Insert(&db.ErrorLog{Description: "Re-prase time error", Error: err2.Error(), Time: time.Now()})
+		}else{
+			orderTime = t
+		}
+
+
+		if order.Closed != ""{
+			if order.Type == "LIMIT_BUY" {
+				MarketOrder[order.Exchange].BuyOpening = false
+				if _ , ok := MyOwnWallet[strings.Split(order.Exchange, "-")[1]]; ok{
+					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Lock.Lock()
+					defer MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Lock.Unlock()
+					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Wallet.Available += order.Quantity
+				}else {
+					var temp bittrex.Balance
+					temp.Available = order.Quantity
+					temp.Balance = order.Quantity
+					temp.Currency = strings.Split(order.Exchange, "-")[1]
+					MyOwnWallet[strings.Split(order.Exchange, "-")[1]] = &OwnWallet{Wallet:temp}
+				}
+
+
+			}else{
+				MarketOrder[order.Exchange].SellOpening = false
+				if _ , ok := MyOwnWallet[strings.Split(order.Exchange, "-")[1]]; ok {
+					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Lock.Lock()
+					defer MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Lock.Unlock()
+					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Wallet.Available -= order.Quantity
+				}
+			}
+		}
+	}
+	return
+}
+
+/*func refreshOrder(){
 	for t:= range time.NewTicker(time.Second * 5 ).C{
 
 		session := mydb.Session.Clone()
@@ -379,7 +525,7 @@ func refreshOrder(){
 									tradeHelper.SellHelper(rate, quantity, v.MarketName, BTCBalance.Available, 0, *bapi, mydb, "Resell non-sell order")
 								}
 							}
-						/*	ofee := (rate * quantity) * fee
+							ofee := (rate * quantity) * fee
 							total := (rate*quantity) - ofee
 
 							//uuid := "abc"
@@ -405,12 +551,12 @@ func refreshOrder(){
 									e.Insert(&db.ErrorLog{Description: "Place sell order", Error: sellerr.Error(), Time: time.Now()})
 
 								}
-							}*/
+							}
 						}
 					}
 				}
 
-			} /*else if time.Now().Sub(v.Buy.CompleteTime ).Hours() > 24 {
+			} else if time.Now().Sub(v.Buy.CompleteTime ).Hours() > 24 {
 				price , err :=bapi.GetTicker(v.MarketName)
 				if err!= nil{
 					e := session.DB("v2").C("ErrorLog").With(session)
@@ -447,9 +593,9 @@ func refreshOrder(){
 					}
 				}
 
-			}*/
+			}
 
 		}
 		JobChannel <- t
 	}
-}
+}*/

@@ -460,7 +460,7 @@ func SellMarket(market string, bidPrice  float64) {
 }
 
 
-func BuySellMarkets(market string, bidPrice float64, askPrice float64)  {
+func BuySellMarkets(market string,  bidPrice, askPrice float64)  {
 	bapi := bittrex.New(API_KEY, API_SECRET)
 	betSize := minTotal
 	rate := bidPrice

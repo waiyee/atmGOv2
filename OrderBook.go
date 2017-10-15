@@ -324,8 +324,16 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 					}
 
 				}else{
-					MarketOrder[market].BuyOpening = false
-
+					err3 := bapi.CancelOrder(MarketOrder[market].BuyOrderUUID )
+					if err3 != nil{
+						session := mydb.Session.Clone()
+						defer session.Close()
+						e := session.DB("v2").C("ErrorLog").With(session)
+						e.Insert(&db.ErrorLog{Description:"Cancel Order API - ", Error:err3.Error(), Time:time.Now()})
+					}else {
+						MarketOrder[market].BuyOrderUUID = ""
+						MarketOrder[market].BuyOpening = false
+					}
 				}
 			}
 
@@ -554,9 +562,31 @@ func CheckOrder(uuid string)(orderTime time.Time){
 		}else if order.Quantity != order.QuantityRemaining{
 			// partially buy / sell
 			if order.Type == "LIMIT_BUY" {
-
+				if time.Now().Sub(t).Minutes() > 30 {
+					err3 := bapi.CancelOrder(MarketOrder[order.Exchange].BuyOrderUUID )
+					if err3 != nil{
+						session := mydb.Session.Clone()
+						defer session.Close()
+						e := session.DB("v2").C("ErrorLog").With(session)
+						e.Insert(&db.ErrorLog{Description:"Cancel Order Partial buy API - ", Error:err3.Error(), Time:time.Now()})
+					}else {
+						MarketOrder[order.Exchange].BuyOrderUUID = ""
+						MarketOrder[order.Exchange].BuyOpening = false
+					}
+				}
 			}else {
-
+				if time.Now().Sub(t).Minutes() > 30 {
+					err3 := bapi.CancelOrder(MarketOrder[order.Exchange].SellOrderUUID )
+					if err3 != nil{
+						session := mydb.Session.Clone()
+						defer session.Close()
+						e := session.DB("v2").C("ErrorLog").With(session)
+						e.Insert(&db.ErrorLog{Description:"Cancel Order Partial sell API - ", Error:err3.Error(), Time:time.Now()})
+					}else {
+						MarketOrder[order.Exchange].SellOrderUUID = ""
+						MarketOrder[order.Exchange].SellOpening = false
+					}
+				}
 			}
 		}
 	}

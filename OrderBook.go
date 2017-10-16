@@ -486,6 +486,18 @@ func BuySellMarkets(market string,  bidPrice, askPrice float64)  {
 		MarketOrder[market].BuyOrderUUID = Buyuuid
 		MarketOrder[market].BuyOpening = true
 
+		if _ , ok := MyOwnWallet[strings.Split(market, "-")[1]]; ok{
+			MyOwnWallet[strings.Split(market, "-")[1]].Lock.Lock()
+			defer MyOwnWallet[strings.Split(market, "-")[1]].Lock.Unlock()
+			MyOwnWallet[strings.Split(market, "-")[1]].Wallet.Available += quantity
+		}else {
+			var temp bittrex.Balance
+			temp.Available = quantity
+			temp.Balance = quantity
+			temp.Currency = strings.Split(market, "-")[1]
+			MyOwnWallet[strings.Split(market, "-")[1]] = &OwnWallet{Wallet:temp}
+		}
+
 		go func() {
 			for range time.NewTicker(time.Millisecond * 50).C {
 				if MarketOrder[market].BuyOpening {
@@ -537,17 +549,7 @@ func CheckOrder(uuid string)(orderTime time.Time){
 			if order.Type == "LIMIT_BUY" {
 				MarketOrder[order.Exchange].BuyOpening = false
 				MarketOrder[order.Exchange].BuyOrderUUID = ""
-				if _ , ok := MyOwnWallet[strings.Split(order.Exchange, "-")[1]]; ok{
-					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Lock.Lock()
-					defer MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Lock.Unlock()
-					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Wallet.Available += order.Quantity
-				}else {
-					var temp bittrex.Balance
-					temp.Available = order.Quantity
-					temp.Balance = order.Quantity
-					temp.Currency = strings.Split(order.Exchange, "-")[1]
-					MyOwnWallet[strings.Split(order.Exchange, "-")[1]] = &OwnWallet{Wallet:temp}
-				}
+
 
 
 			}else{

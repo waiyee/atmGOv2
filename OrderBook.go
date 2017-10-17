@@ -559,7 +559,7 @@ func BuySellMarkets(market string,  bidPrice, askPrice float64)  {
 		MyOwnWallet["BTC"].Lock.Unlock()
 
 		go func() {
-			for range time.NewTicker(time.Millisecond * 50).C {
+			for range time.NewTicker(time.Millisecond * 150).C {
 				if MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "" {
 					go BuyMarket(market, bidPrice , askPrice)
 				}

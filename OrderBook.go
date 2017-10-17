@@ -282,7 +282,7 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 				if errS != nil {
 					session := mydb.Session.Clone()
 					e := session.DB("v4").C("ErrorLog").With(session)
-					e.Insert(&db.ErrorLog{Description: "Sell Limit API - ", Error: errS.Error(), Time: time.Now()})
+					e.Insert(&db.ErrorLog{Description: "Sell Limit API - "+market, Error: errS.Error(), Time: time.Now()})
 					session.Close()
 				} else {
 					// selling = true
@@ -301,7 +301,7 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 			if err2 != nil{
 				session := mydb.Session.Clone()
 				e := session.DB("v4").C("ErrorLog").With(session)
-				e.Insert(&db.ErrorLog{Description:"Get Ticker API - ", Error:err2.Error(), Time:time.Now()})
+				e.Insert(&db.ErrorLog{Description:"Get Ticker API - "+market, Error:err2.Error(), Time:time.Now()})
 				session.Close()
 			}else{
 				/*if buy signal & bid price up, cancel buy -> buying=false -> BUY
@@ -317,7 +317,7 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 					if err3 != nil{
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("ErrorLog").With(session)
-						e.Insert(&db.ErrorLog{Description:"Cancel Order API - ", Error:err3.Error(), Time:time.Now()})
+						e.Insert(&db.ErrorLog{Description:"Cancel buy Order API price up & buy signal - "+market,  Error:err3.Error(), Time:time.Now()})
 						session.Close()
 					}else{
 						MarketOrder[market].BuyOpening = false
@@ -332,7 +332,7 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 						if errB != nil{
 							session := mydb.Session.Clone()
 							e := session.DB("v4").C("ErrorLog").With(session)
-							e.Insert(&db.ErrorLog{Description:"Limit Buy price up API - ", Error:errB.Error(), Time:time.Now()})
+							e.Insert(&db.ErrorLog{Description:"Limit Buy price up API - "+market, Error:errB.Error(), Time:time.Now()})
 							session.Close()
 						}else{
 							MarketOrder[market].BuyOrderUUID = Buyuuid
@@ -350,7 +350,7 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 					if err3 != nil{
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("ErrorLog").With(session)
-						e.Insert(&db.ErrorLog{Description:"Cancel Order API - ", Error:err3.Error(), Time:time.Now()})
+						e.Insert(&db.ErrorLog{Description:"Cancel buy Order API final < FinalThresold - "+market, Error:err3.Error(), Time:time.Now()})
 						session.Close()
 					}else {
 						MarketOrder[market].BuyOrderUUID = ""
@@ -377,7 +377,7 @@ func SellMarket(market string, bidPrice  float64) {
 		if err3 != nil{
 			session := mydb.Session.Clone()
 			e := session.DB("v4").C("ErrorLog").With(session)
-			e.Insert(&db.ErrorLog{Description:"Cancel Order API - ", Error:err3.Error(), Time:time.Now()})
+			e.Insert(&db.ErrorLog{Description:"Cancel Order API -times up "+market, Error:err3.Error(), Time:time.Now()})
 			session.Close()
 		}else {
 			MarketOrder[market].SellOpening = false
@@ -391,7 +391,7 @@ func SellMarket(market string, bidPrice  float64) {
 				session := mydb.Session.Clone()
 				defer session.Close()
 				e := session.DB("v4").C("ErrorLog").With(session)
-				e.Insert(&db.ErrorLog{Description: "Get Ticker API - ", Error: err2.Error(), Time: time.Now()})
+				e.Insert(&db.ErrorLog{Description: "Get Ticker API - "+market, Error: err2.Error(), Time: time.Now()})
 			} else {
 
 				// sell again
@@ -402,7 +402,7 @@ func SellMarket(market string, bidPrice  float64) {
 				if errS != nil{
 					session := mydb.Session.Clone()
 					e := session.DB("v4").C("ErrorLog").With(session)
-					e.Insert(&db.ErrorLog{Description:"Limit Sell Time up API - ", Error:errS.Error(), Time:time.Now()})
+					e.Insert(&db.ErrorLog{Description:"Limit Sell Time up API - "+market, Error:errS.Error(), Time:time.Now()})
 					session.Close()
 				}else{
 					MarketOrder[market].SellOrderUUID = Selluuid
@@ -434,7 +434,7 @@ func SellMarket(market string, bidPrice  float64) {
 				if err3 != nil {
 					session := mydb.Session.Clone()
 					e := session.DB("v4").C("ErrorLog").With(session)
-					e.Insert(&db.ErrorLog{Description: "Cancel Order API - ", Error: err3.Error(), Time: time.Now()})
+					e.Insert(&db.ErrorLog{Description: "Cancel sell Order API - sell signal "+market, Error: err3.Error(), Time: time.Now()})
 					session.Close()
 				} else {
 					session := mydb.Session.Clone()
@@ -451,7 +451,7 @@ func SellMarket(market string, bidPrice  float64) {
 					if errS != nil {
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("ErrorLog").With(session)
-						e.Insert(&db.ErrorLog{Description: "Limit Sell Time up API - ", Error: errS.Error(), Time: time.Now()})
+						e.Insert(&db.ErrorLog{Description: "Limit Sell Time up API - "+market, Error: errS.Error(), Time: time.Now()})
 						session.Close()
 					} else {
 						MarketOrder[market].SellOrderUUID = Selluuid
@@ -471,7 +471,7 @@ func SellMarket(market string, bidPrice  float64) {
 				if err3 != nil{
 					session := mydb.Session.Clone()
 					e := session.DB("v4").C("ErrorLog").With(session)
-					e.Insert(&db.ErrorLog{Description:"Cancel Order API - ", Error:err3.Error(), Time:time.Now()})
+					e.Insert(&db.ErrorLog{Description:"Cancel sell Order API - buy signal + bid price down"+market,  Error:err3.Error(), Time:time.Now()})
 					session.Close()
 				}else {
 					MarketOrder[market].SellOpening = false
@@ -494,7 +494,7 @@ func SellMarket(market string, bidPrice  float64) {
 					if errB != nil {
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("ErrorLog").With(session)
-						e.Insert(&db.ErrorLog{Description: "Limit Buy buy signal resell API - ", Error: errB.Error(), Time: time.Now()})
+						e.Insert(&db.ErrorLog{Description: "Limit Buy buy signal resell API - "+market, Error: errB.Error(), Time: time.Now()})
 						session.Close()
 					}else{
 						MarketOrder[market].BuyOrderUUID = Buyuuid
@@ -509,7 +509,7 @@ func SellMarket(market string, bidPrice  float64) {
 					if errS != nil{
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("ErrorLog").With(session)
-						e.Insert(&db.ErrorLog{Description: "Limit Sell buy signal resell  API - ", Error: errS.Error(), Time: time.Now()})
+						e.Insert(&db.ErrorLog{Description: "Limit Sell buy signal resell  API - "+market, Error: errS.Error(), Time: time.Now()})
 						session.Close()
 					}else {
 						MarketOrder[market].SellOrderUUID = Selluuid
@@ -554,17 +554,9 @@ func BuySellMarkets(market string,  bidPrice, askPrice float64)  {
 		e.Insert(&LogOrderBook{ UUID:  Buyuuid, Market:market, LogTime: time.Now(), OrderType: "Buy", Remark: "first: buy order"})
 		session.Close()
 
-		if _ , ok := MyOwnWallet[strings.Split(market, "-")[1]]; ok{
-			MyOwnWallet[strings.Split(market, "-")[1]].Lock.Lock()
-			MyOwnWallet[strings.Split(market, "-")[1]].Wallet.Available += quantity
-			MyOwnWallet[strings.Split(market, "-")[1]].Lock.Unlock()
-		}else {
-			var temp bittrex.Balance
-			temp.Available = quantity
-			temp.Balance = quantity
-			temp.Currency = strings.Split(market, "-")[1]
-			MyOwnWallet[strings.Split(market, "-")[1]] = &OwnWallet{Wallet:temp}
-		}
+		MyOwnWallet["BTC"].Lock.Lock()
+		MyOwnWallet["BTC"].Wallet.Available -= rate * quantity * (1+fee)
+		MyOwnWallet["BTC"].Lock.Unlock()
 
 		go func() {
 			for range time.NewTicker(time.Millisecond * 50).C {
@@ -592,7 +584,7 @@ func CheckOrder(uuid string)(orderTime time.Time, status bool){
 		session := mydb.Session.Clone()
 		defer session.Close()
 		e := session.DB("v4").C("ErrorLog").With(session)
-		e.Insert(&db.ErrorLog{Description:"Check Order API - ", Error:err.Error(), Time:time.Now()})
+		e.Insert(&db.ErrorLog{Description:"Check Order API - "+uuid, Error:err.Error(), Time:time.Now()})
 	}else {
 		a := strings.Split(order.Opened, ".")
 		var LayoutLenMill string
@@ -619,6 +611,17 @@ func CheckOrder(uuid string)(orderTime time.Time, status bool){
 				/*MarketOrder[order.Exchange].BuyOpening = false
 				MarketOrder[order.Exchange].BuyOrderUUID = ""*/
 				status = false
+				if _ , ok := MyOwnWallet[strings.Split(order.Exchange, "-")[1]]; ok{
+					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Lock.Lock()
+					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Wallet.Available += order.Quantity
+					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Lock.Unlock()
+				}else {
+					var temp bittrex.Balance
+					temp.Available = order.Quantity
+					temp.Balance = order.Quantity
+					temp.Currency = strings.Split(order.Exchange, "-")[1]
+					MyOwnWallet[strings.Split(order.Exchange, "-")[1]] = &OwnWallet{Wallet:temp}
+				}
 
 			}else{
 				/*MarketOrder[order.Exchange].SellOpening = false
@@ -638,7 +641,7 @@ func CheckOrder(uuid string)(orderTime time.Time, status bool){
 					if err3 != nil{
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("ErrorLog").With(session)
-						e.Insert(&db.ErrorLog{Description:"Cancel Order Partial buy API - ", Error:err3.Error(), Time:time.Now()})
+						e.Insert(&db.ErrorLog{Description:"Cancel Order Partial buy API - "+order.Exchange, Error:err3.Error(), Time:time.Now()})
 						session.Close()
 					}else {
 						MarketOrder[order.Exchange].BuyOrderUUID = ""
@@ -656,7 +659,7 @@ func CheckOrder(uuid string)(orderTime time.Time, status bool){
 					if err3 != nil{
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("ErrorLog").With(session)
-						e.Insert(&db.ErrorLog{Description:"Cancel Order Partial sell API - ", Error:err3.Error(), Time:time.Now()})
+						e.Insert(&db.ErrorLog{Description:"Cancel Order Partial sell API - "+order.Exchange, Error:err3.Error(), Time:time.Now()})
 						session.Close()
 					}else {
 						MarketOrder[order.Exchange].SellOrderUUID = ""

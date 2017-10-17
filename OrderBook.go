@@ -274,21 +274,23 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 		if !MarketOrder[market].BuyOpening{
 			// Buy filled = > sell order
 			MyOwnWallet[strings.Split(market, "-")[1]].Lock.Lock()
-			Selluuid, errS := bapi.SellLimit(market, MyOwnWallet[strings.Split(market, "-")[1]].Wallet.Available, askPrice)
-			MyOwnWallet[strings.Split(market, "-")[1]].Lock.Unlock()
-			if errS != nil{
-				session := mydb.Session.Clone()
-				e := session.DB("v4").C("ErrorLog").With(session)
-				e.Insert(&db.ErrorLog{Description:"Sell Limit API - ", Error:errS.Error(), Time:time.Now()})
-				session.Close()
-			}else {
-				// selling = true
-				MarketOrder[market].SellOrderUUID = Selluuid
-				MarketOrder[market].SellOpening = true
-				session := mydb.Session.Clone()
-				e := session.DB("v4").C("OrderBooks").With(session)
-				e.Insert(&LogOrderBook{UUID:Selluuid, Market:market, LogTime: time.Now(), OrderType: "Sell", Remark: "Buy filled , sell order"})
-				session.Close()
+			if MyOwnWallet[strings.Split(market, "-")[1]].Wallet.Available * askPrice > 0.0005 {
+				Selluuid, errS := bapi.SellLimit(market, MyOwnWallet[strings.Split(market, "-")[1]].Wallet.Available, askPrice)
+				MyOwnWallet[strings.Split(market, "-")[1]].Lock.Unlock()
+				if errS != nil {
+					session := mydb.Session.Clone()
+					e := session.DB("v4").C("ErrorLog").With(session)
+					e.Insert(&db.ErrorLog{Description: "Sell Limit API - ", Error: errS.Error(), Time: time.Now()})
+					session.Close()
+				} else {
+					// selling = true
+					MarketOrder[market].SellOrderUUID = Selluuid
+					MarketOrder[market].SellOpening = true
+					session := mydb.Session.Clone()
+					e := session.DB("v4").C("OrderBooks").With(session)
+					e.Insert(&LogOrderBook{UUID: Selluuid, Market: market, LogTime: time.Now(), OrderType: "Sell", Remark: "Buy filled , sell order"})
+					session.Close()
+				}
 			}
 
 		}else{

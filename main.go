@@ -107,10 +107,10 @@ func logWallet(){
 		}
 
 	}
-	d := session.DB("v2").C("LogEstBTC").With(session)
+	d := session.DB("v4").C("LogEstBTC").With(session)
 	err := d.Insert(&logForBTC{LogTime:time.Now(), EstBTC:estBTCRate})
 	if err != nil {
-		e := session.DB("v2").C("ErrorLog").With(session)
+		e := session.DB("v4").C("ErrorLog").With(session)
 		e.Insert(&db.ErrorLog{Description:"Insert EST BTC balance in DB", Error:err.Error(), Time:time.Now()})
 	}
 
@@ -127,7 +127,7 @@ func  refreshWallet()(result bool){
 	defer session.Close()
 	wallet, err := bAPI.GetBalances()
 	if err != nil{
-		e := session.DB("v2").C("ErrorLog").With(session)
+		e := session.DB("v4").C("ErrorLog").With(session)
 		e.Insert(&db.ErrorLog{Description:"Refresh BTC balance - API", Error:err.Error(), Time:time.Now()})
 		result = false
 		return
@@ -153,7 +153,7 @@ func SetupMarkets(){
 	if err != nil {
 		session := mydb.Session.Clone()
 		defer session.Close()
-		e := session.DB("v2").C("ErrorLog").With(session)
+		e := session.DB("v4").C("ErrorLog").With(session)
 		e.Insert(&db.ErrorLog{Description:"SetupMarkets  - API", Error:err.Error(), Time:time.Now()})
 
 	}else{
@@ -163,7 +163,7 @@ func SetupMarkets(){
 				MarketOrder[v.MarketName] = &MarketOrderDetail{BuyOpening:false, SellOpening:false}
 				MF[v.MarketName] = &MarketFinal{Final:0}
 				/*		var temp db.RateWithMarketName
-						h := session.DB("v2").C("LogHourly").With(session)
+						h := session.DB("v4").C("LogHourly").With(session)
 
 						err2 := h.Find(bson.M{"marketname":v.MarketName}).One(&temp)
 
@@ -175,7 +175,7 @@ func SetupMarkets(){
 						} else if err2 == nil{
 							BTCHourlyMarket[v.MarketName] = &db.RateWithLock{HMR:temp.HMR}
 						} else if err2 != nil{
-							e := session.DB("v2").C("ErrorLog").With(session)
+							e := session.DB("v4").C("ErrorLog").With(session)
 							e.Insert(&db.ErrorLog{Description:"Get Hourly Rate From DB", Error:err2.Error(), Time:time.Now()})
 						}
 			*/
@@ -192,7 +192,7 @@ func SetupOpeningOrder()  {
 	if err != nil {
 		session := mydb.Session.Clone()
 		defer session.Close()
-		e := session.DB("v2").C("ErrorLog").With(session)
+		e := session.DB("v4").C("ErrorLog").With(session)
 		e.Insert(&db.ErrorLog{Description:"SetupOpeningOrder  - API", Error:err.Error(), Time:time.Now()})
 	}else {
 		for _,v := range orders {
@@ -243,7 +243,7 @@ func looptest(){
 
 func main() {
 
-	mydb = db.NewDbSession("mongodb://localhost:27017/?authSource=v2", "v2")
+	mydb = db.NewDbSession("mongodb://localhost:27017/?authSource=v4", "v4")
 
 	thisSM.Markets = make(map[string]bittrex.MarketSummary)
 	lastSM.Markets = make(map[string]bittrex.MarketSummary)

@@ -9,7 +9,6 @@ import (
 	"atm/db"
 
 	"strings"
-	"golang.org/x/net/icmp"
 )
 
 var minTotal = float64(0.00060000)

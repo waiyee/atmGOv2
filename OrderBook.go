@@ -307,7 +307,7 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 				MF[market].Lock.Unlock()
 				spread := ( ticker.Ask - ticker.Bid - 2 * satoshi ) / ticker.Ask
 
-				if ticker.Bid > bidPrice && final > FinalThresold && spread > SpreadThresold{
+				if ticker.Bid  > bidPrice +  satoshi && final > FinalThresold && spread > SpreadThresold{
 					//cancel order
 					err3 := bapi.CancelOrder(MarketOrder[market].BuyOrderUUID )
 					if err3 != nil{
@@ -322,7 +322,7 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 						e.Insert(&LogOrderBook{ Market:market, LogTime: time.Now(), OrderType: "Cancel Buy", Remark: "buy signal + bid price up, cancel buy"})
 						session.Close()
 						// buy again
-						rate := ticker.Bid
+						rate := ticker.Bid + satoshi
 						quantity := (betSize * (1-fee)) / rate
 						Buyuuid , errB := bapi.BuyLimit(market, quantity, rate)
 						if errB != nil{
@@ -456,7 +456,7 @@ func SellMarket(market string, bidPrice  float64) {
 					}
 
 				}
-			} else if ticker.Bid < bidPrice && final > FinalThresold  && spread > SpreadThresold{
+			} else if ticker.Bid < bidPrice - satoshi && final > FinalThresold  && spread > SpreadThresold{
 				/* signal & bid price down,1. cancel sell
 					2. buy at bid, sell at ask (same time)
 				*/
@@ -530,13 +530,18 @@ func BuySellMarkets(market string,  bidPrice, askPrice float64)  {
 
 	if errB != nil{
 		session := mydb.Session.Clone()
-		defer session.Close()
 		e := session.DB("v4").C("ErrorLog").With(session)
 		e.Insert(&db.ErrorLog{Description:"Buy Limit API - ", Error:errB.Error(), Time:time.Now()})
+		session.Close()
 	}else{
 		// buying=true
 		MarketOrder[market].BuyOrderUUID = Buyuuid
 		MarketOrder[market].BuyOpening = true
+
+		session := mydb.Session.Clone()
+		e := session.DB("v4").C("OrderBooks").With(session)
+		e.Insert(&LogOrderBook{ UUID:  Buyuuid, Market:market, LogTime: time.Now(), OrderType: "Buy", Remark: "first: buy order"})
+		session.Close()
 
 		if _ , ok := MyOwnWallet[strings.Split(market, "-")[1]]; ok{
 			MyOwnWallet[strings.Split(market, "-")[1]].Lock.Lock()
@@ -552,13 +557,13 @@ func BuySellMarkets(market string,  bidPrice, askPrice float64)  {
 
 		go func() {
 			for range time.NewTicker(time.Millisecond * 50).C {
-				if MarketOrder[market].BuyOpening {
+				if MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "" {
 					go BuyMarket(market, bidPrice , askPrice)
 				}
-				if MarketOrder[market].SellOpening {
-					go SellMarket(market, bidPrice   )
+				if MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != ""{
+					go SellMarket(market, bidPrice )
 				}
-				if !MarketOrder[market].SellOpening && !MarketOrder[market].BuyOpening {
+				if !(MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != "") && !(MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "" ) {
 					break
 				}
 			}
@@ -601,8 +606,6 @@ func CheckOrder(uuid string)(orderTime time.Time){
 			if order.Type == "LIMIT_BUY" {
 				MarketOrder[order.Exchange].BuyOpening = false
 				MarketOrder[order.Exchange].BuyOrderUUID = ""
-
-
 
 			}else{
 				MarketOrder[order.Exchange].SellOpening = false

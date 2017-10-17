@@ -160,7 +160,7 @@ func SetupMarkets(){
 		for _,v := range markets {
 			if v.BaseCurrency == "BTC"{
 				BTCMarkets = append(BTCMarkets, v.MarketName)
-				MarketOrder[v.MarketName] = &MarketOrderDetail{BuyOpening:false, SellOpening:false}
+				MarketOrder[v.MarketName] = &MarketOrderDetail{BuyOrderUUID: "" , BuyOpening:false, SellOrderUUID:"" , SellOpening:false}
 				MF[v.MarketName] = &MarketFinal{Final:0}
 				/*		var temp db.RateWithMarketName
 						h := session.DB("v4").C("LogHourly").With(session)

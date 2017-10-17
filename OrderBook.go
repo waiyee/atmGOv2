@@ -270,8 +270,10 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 	bapi := bittrex.New(API_KEY, API_SECRET)
 	betSize := minTotal
 
-		CheckOrder(MarketOrder[market].BuyOrderUUID)
-		if !MarketOrder[market].BuyOpening{
+		_, status := CheckOrder(MarketOrder[market].BuyOrderUUID)
+		if !status{
+			MarketOrder[market].BuyOrderUUID = ""
+			MarketOrder[market].BuyOpening = false
 			// Buy filled = > sell order
 			MyOwnWallet[strings.Split(market, "-")[1]].Lock.Lock()
 			if MyOwnWallet[strings.Split(market, "-")[1]].Wallet.Available * askPrice > 0.0005 {
@@ -368,7 +370,7 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 func SellMarket(market string, bidPrice  float64) {
 	bapi := bittrex.New(API_KEY, API_SECRET)
 	betSize := minTotal
-	ot := CheckOrder(MarketOrder[market].SellOrderUUID)
+	ot, status := CheckOrder(MarketOrder[market].SellOrderUUID)
 	if time.Now().Sub(ot).Minutes() > 24*60 {
 		// time up, cancel order, sell at bid
 		err3 := bapi.CancelOrder(MarketOrder[market].SellOrderUUID )
@@ -378,6 +380,8 @@ func SellMarket(market string, bidPrice  float64) {
 			e.Insert(&db.ErrorLog{Description:"Cancel Order API - ", Error:err3.Error(), Time:time.Now()})
 			session.Close()
 		}else {
+			MarketOrder[market].SellOpening = false
+			MarketOrder[market].SellOrderUUID = ""
 			session := mydb.Session.Clone()
 			e := session.DB("v4").C("OrderBooks").With(session)
 			e.Insert(&LogOrderBook{   Market:market, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "Times up sell, cancel sell"})
@@ -389,7 +393,7 @@ func SellMarket(market string, bidPrice  float64) {
 				e := session.DB("v4").C("ErrorLog").With(session)
 				e.Insert(&db.ErrorLog{Description: "Get Ticker API - ", Error: err2.Error(), Time: time.Now()})
 			} else {
-				MarketOrder[market].SellOpening = false
+
 				// sell again
 				rate := ticker.Bid
 				MyOwnWallet[strings.Split(market, "-")[1]].Lock.Lock()
@@ -410,7 +414,7 @@ func SellMarket(market string, bidPrice  float64) {
 				}
 			}
 		}
-	}  else {
+	}  else if status {
 		// not yet fill
 		ticker, err2 := bapi.GetTicker(market)
 		if err2 != nil {
@@ -438,6 +442,7 @@ func SellMarket(market string, bidPrice  float64) {
 					e.Insert(&LogOrderBook{  Market:market, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "sell signal, cancel sell"})
 					session.Close()
 					MarketOrder[market].SellOpening = false
+					MarketOrder[market].SellOrderUUID = ""
 					// sell again
 					rate := ticker.Bid
 					MyOwnWallet[strings.Split(market, "-")[1]].Lock.Lock()
@@ -469,7 +474,8 @@ func SellMarket(market string, bidPrice  float64) {
 					e.Insert(&db.ErrorLog{Description:"Cancel Order API - ", Error:err3.Error(), Time:time.Now()})
 					session.Close()
 				}else {
-
+					MarketOrder[market].SellOpening = false
+					MarketOrder[market].SellOrderUUID = ""
 					session := mydb.Session.Clone()
 					e := session.DB("v4").C("OrderBooks").With(session)
 					e.Insert(&LogOrderBook{   Market:market, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "buy signal bid price down cancel sell"})
@@ -518,6 +524,9 @@ func SellMarket(market string, bidPrice  float64) {
 				}
 			}
 		}
+	}else{
+		MarketOrder[market].SellOrderUUID = ""
+		MarketOrder[market].SellOpening = false
 	}
 }
 
@@ -574,10 +583,11 @@ func BuySellMarkets(market string,  bidPrice, askPrice float64)  {
 	}
 }
 
-func CheckOrder(uuid string)(orderTime time.Time){
+func CheckOrder(uuid string)(orderTime time.Time, status bool){
 
 	bapi := bittrex.New(API_KEY, API_SECRET)
 	order, err := bapi.GetOrder(uuid)
+	status = true
 	if err != nil{
 		session := mydb.Session.Clone()
 		defer session.Close()
@@ -606,12 +616,14 @@ func CheckOrder(uuid string)(orderTime time.Time){
 
 		if order.Closed != ""{
 			if order.Type == "LIMIT_BUY" {
-				MarketOrder[order.Exchange].BuyOpening = false
-				MarketOrder[order.Exchange].BuyOrderUUID = ""
+				/*MarketOrder[order.Exchange].BuyOpening = false
+				MarketOrder[order.Exchange].BuyOrderUUID = ""*/
+				status = false
 
 			}else{
-				MarketOrder[order.Exchange].SellOpening = false
-				MarketOrder[order.Exchange].SellOrderUUID = ""
+				/*MarketOrder[order.Exchange].SellOpening = false
+				MarketOrder[order.Exchange].SellOrderUUID = ""*/
+				status = false
 				if _ , ok := MyOwnWallet[strings.Split(order.Exchange, "-")[1]]; ok {
 					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Lock.Lock()
 					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Wallet.Available -= order.Quantity
@@ -631,6 +643,7 @@ func CheckOrder(uuid string)(orderTime time.Time){
 					}else {
 						MarketOrder[order.Exchange].BuyOrderUUID = ""
 						MarketOrder[order.Exchange].BuyOpening = false
+						status = false
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("OrderBooks").With(session)
 						e.Insert(&LogOrderBook{   Market:order.Exchange, LogTime: time.Now(), OrderType: "Cancel Buy", Remark: "partially buy exist 30 min cancel buy"})
@@ -648,6 +661,7 @@ func CheckOrder(uuid string)(orderTime time.Time){
 					}else {
 						MarketOrder[order.Exchange].SellOrderUUID = ""
 						MarketOrder[order.Exchange].SellOpening = false
+						status = false
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("OrderBooks").With(session)
 						e.Insert(&LogOrderBook{  Market:order.Exchange, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "partially sell exist 30 min cancel sell"})

@@ -341,7 +341,7 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 
 					}
 
-				}else{
+				}else if final < FinalThresold{
 					err3 := bapi.CancelOrder(MarketOrder[market].BuyOrderUUID )
 					if err3 != nil{
 						session := mydb.Session.Clone()

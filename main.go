@@ -44,6 +44,8 @@ type MarketOrderDetail struct {
 	SellOrderUUID string
 	BuyOpening	bool
 	SellOpening	bool
+	CheckingBuy string
+	CheckingSell string
 	Lock sync.Mutex
 }
 

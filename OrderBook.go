@@ -9,6 +9,7 @@ import (
 	"atm/db"
 
 	"strings"
+	"fmt"
 )
 
 var minTotal = float64(0.00060000)
@@ -267,6 +268,7 @@ func periodicGetOrderBook(t time.Time, markets []string)  {
 }
 
 func BuyMarket(market string, bidPrice float64, askPrice float64){
+	MarketOrder[market].CheckingBuy = MarketOrder[market].BuyOrderUUID
 	bapi := bittrex.New(API_KEY, API_SECRET)
 	betSize := minTotal
 
@@ -274,9 +276,12 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 		if !status{
 			MarketOrder[market].BuyOrderUUID = ""
 			MarketOrder[market].BuyOpening = false
+
 			// Buy filled = > sell order
 			MyOwnWallet[strings.Split(market, "-")[1]].Lock.Lock()
+			fmt.Println(market, " buymarket prepare to sell Wallet ", MyOwnWallet[strings.Split(market, "-")[1]].Wallet.Available, " wallet * price", MyOwnWallet[strings.Split(market, "-")[1]].Wallet.Available*askPrice, " price " , askPrice)
 			if MyOwnWallet[strings.Split(market, "-")[1]].Wallet.Available * askPrice > 0.0005 {
+				fmt.Println(market, " buymarket prepare place sell order ")
 				Selluuid, errS := bapi.SellLimit(market, MyOwnWallet[strings.Split(market, "-")[1]].Wallet.Available, askPrice)
 				MyOwnWallet[strings.Split(market, "-")[1]].Lock.Unlock()
 				if errS != nil {
@@ -364,10 +369,11 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 			}
 
 	}
-
+	MarketOrder[market].CheckingBuy = ""
 }
 
 func SellMarket(market string, bidPrice  float64) {
+	MarketOrder[market].CheckingSell = MarketOrder[market].SellOrderUUID
 	bapi := bittrex.New(API_KEY, API_SECRET)
 	betSize := minTotal
 	ot, status := CheckOrder(MarketOrder[market].SellOrderUUID)
@@ -528,6 +534,7 @@ func SellMarket(market string, bidPrice  float64) {
 		MarketOrder[market].SellOrderUUID = ""
 		MarketOrder[market].SellOpening = false
 	}
+	MarketOrder[market].CheckingSell = ""
 }
 
 
@@ -560,13 +567,13 @@ func BuySellMarkets(market string,  bidPrice, askPrice float64)  {
 
 		go func() {
 			for range time.NewTicker(time.Millisecond * 150).C {
-				if MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "" {
+				if MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "" && MarketOrder[market].CheckingBuy == ""  {
 					go BuyMarket(market, bidPrice , askPrice)
 				}
-				if MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != ""{
+				if MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != "" && MarketOrder[market].CheckingSell == ""{
 					go SellMarket(market, bidPrice )
 				}
-				if !(MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != "") && !(MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "" ) {
+				if !(MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != ""&& MarketOrder[market].CheckingBuy == "") && !(MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "" && MarketOrder[market].CheckingSell == "") {
 					break
 				}
 			}
@@ -586,6 +593,10 @@ func CheckOrder(uuid string)(orderTime time.Time, status bool){
 		e := session.DB("v4").C("ErrorLog").With(session)
 		e.Insert(&db.ErrorLog{Description:"Check Order API - "+uuid, Error:err.Error(), Time:time.Now()})
 	}else {
+		session := mydb.Session.Clone()
+		defer session.Close()
+		e := session.DB("v4").C("CheckOrder").With(session)
+		e.Insert(order)
 		a := strings.Split(order.Opened, ".")
 		var LayoutLenMill string
 		if len(a) > 1 {
@@ -606,11 +617,12 @@ func CheckOrder(uuid string)(orderTime time.Time, status bool){
 		}
 
 
-		if order.Closed != ""{
+		if order.QuantityRemaining == 0 {
 			if order.Type == "LIMIT_BUY" {
 				/*MarketOrder[order.Exchange].BuyOpening = false
 				MarketOrder[order.Exchange].BuyOrderUUID = ""*/
 				status = false
+				fmt.Println(order.Exchange, " buy - closed")
 				if _ , ok := MyOwnWallet[strings.Split(order.Exchange, "-")[1]]; ok{
 					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Lock.Lock()
 					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Wallet.Available += order.Quantity
@@ -627,6 +639,7 @@ func CheckOrder(uuid string)(orderTime time.Time, status bool){
 				/*MarketOrder[order.Exchange].SellOpening = false
 				MarketOrder[order.Exchange].SellOrderUUID = ""*/
 				status = false
+				fmt.Println(order.Exchange, " sell - closed")
 				if _ , ok := MyOwnWallet[strings.Split(order.Exchange, "-")[1]]; ok {
 					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Lock.Lock()
 					MyOwnWallet[strings.Split(order.Exchange, "-")[1]].Wallet.Available -= order.Quantity

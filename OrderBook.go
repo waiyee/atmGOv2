@@ -268,7 +268,7 @@ func periodicGetOrderBook(t time.Time, markets []string)  {
 }
 
 func BuyMarket(market string, bidPrice float64, askPrice float64){
-	MarketOrder[market].CheckingBuy = MarketOrder[market].BuyOrderUUID
+
 	bapi := bittrex.New(API_KEY, API_SECRET)
 	betSize := minTotal
 
@@ -373,7 +373,7 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 }
 
 func SellMarket(market string, bidPrice  float64) {
-	MarketOrder[market].CheckingSell = MarketOrder[market].SellOrderUUID
+
 	bapi := bittrex.New(API_KEY, API_SECRET)
 	betSize := minTotal
 	ot, status := CheckOrder(MarketOrder[market].SellOrderUUID)
@@ -568,9 +568,11 @@ func BuySellMarkets(market string,  bidPrice, askPrice float64)  {
 		go func() {
 			for range time.NewTicker(time.Millisecond * 150).C {
 				if MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "" && MarketOrder[market].CheckingBuy == ""  {
+					MarketOrder[market].CheckingBuy = MarketOrder[market].BuyOrderUUID
 					go BuyMarket(market, bidPrice , askPrice)
 				}
 				if MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != "" && MarketOrder[market].CheckingSell == ""{
+					MarketOrder[market].CheckingSell = MarketOrder[market].SellOrderUUID
 					go SellMarket(market, bidPrice )
 				}
 				if !(MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != ""&& MarketOrder[market].CheckingBuy == "") && !(MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "" && MarketOrder[market].CheckingSell == "") {

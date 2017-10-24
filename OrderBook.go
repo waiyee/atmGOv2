@@ -575,7 +575,7 @@ func BuySellMarkets(market string,  bidPrice, askPrice float64)  {
 					MarketOrder[market].CheckingSell = MarketOrder[market].SellOrderUUID
 					go SellMarket(market, bidPrice )
 				}
-				if !(MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != ""&& MarketOrder[market].CheckingBuy == "") && !(MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "" && MarketOrder[market].CheckingSell == "") {
+				if !(MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != ""&& MarketOrder[market].CheckingSell == "") && !(MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "" && MarketOrder[market].CheckingBuy == "") {
 					break
 				}
 			}

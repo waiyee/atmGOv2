@@ -268,7 +268,7 @@ func periodicGetOrderBook(t time.Time, markets []string)  {
 }
 
 func BuyMarket(market string, bidPrice float64, askPrice float64){
-
+fmt.Println(market, "checking buy")
 	bapi := bittrex.New(API_KEY, API_SECRET)
 	betSize := minTotal
 
@@ -325,11 +325,13 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 						e.Insert(&db.ErrorLog{Description:"Cancel buy Order API price up & buy signal - "+market,  Error:err3.Error(), Time:time.Now()})
 						session.Close()
 					}else{
-						MarketOrder[market].BuyOpening = false
+
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("OrderBooks").With(session)
-						e.Insert(&LogOrderBook{ Market:market, LogTime: time.Now(), OrderType: "Cancel Buy", Remark: "buy signal + bid price up, cancel buy"})
+						e.Insert(&LogOrderBook{UUID:MarketOrder[market].BuyOrderUUID ,  Market:market, LogTime: time.Now(), OrderType: "Cancel Buy", Remark: "buy signal + bid price up, cancel buy"})
 						session.Close()
+						MarketOrder[market].BuyOpening = false
+						MarketOrder[market].BuyOrderUUID = ""
 						// buy again
 						rate := ticker.Bid + satoshi
 						quantity := (betSize * (1-fee)) / rate
@@ -373,7 +375,7 @@ func BuyMarket(market string, bidPrice float64, askPrice float64){
 }
 
 func SellMarket(market string, bidPrice  float64) {
-
+	fmt.Println(market, "checking sell")
 	bapi := bittrex.New(API_KEY, API_SECRET)
 	betSize := minTotal
 	ot, status := CheckOrder(MarketOrder[market].SellOrderUUID)
@@ -386,12 +388,13 @@ func SellMarket(market string, bidPrice  float64) {
 			e.Insert(&db.ErrorLog{Description:"Cancel Order API -times up "+market, Error:err3.Error(), Time:time.Now()})
 			session.Close()
 		}else {
-			MarketOrder[market].SellOpening = false
-			MarketOrder[market].SellOrderUUID = ""
+
 			session := mydb.Session.Clone()
 			e := session.DB("v4").C("OrderBooks").With(session)
-			e.Insert(&LogOrderBook{   Market:market, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "Times up sell, cancel sell"})
+			e.Insert(&LogOrderBook{UUID:MarketOrder[market].SellOrderUUID,   Market:market, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "Times up sell, cancel sell"})
 			session.Close()
+			MarketOrder[market].SellOpening = false
+			MarketOrder[market].SellOrderUUID = ""
 			ticker, err2 := bapi.GetTicker(market)
 			if err2 != nil {
 				session := mydb.Session.Clone()
@@ -445,7 +448,7 @@ func SellMarket(market string, bidPrice  float64) {
 				} else {
 					session := mydb.Session.Clone()
 					e := session.DB("v4").C("OrderBooks").With(session)
-					e.Insert(&LogOrderBook{  Market:market, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "sell signal, cancel sell"})
+					e.Insert(&LogOrderBook{UUID: MarketOrder[market].SellOrderUUID ,  Market:market, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "sell signal, cancel sell"})
 					session.Close()
 					MarketOrder[market].SellOpening = false
 					MarketOrder[market].SellOrderUUID = ""
@@ -480,12 +483,13 @@ func SellMarket(market string, bidPrice  float64) {
 					e.Insert(&db.ErrorLog{Description:"Cancel sell Order API - buy signal + bid price down"+market,  Error:err3.Error(), Time:time.Now()})
 					session.Close()
 				}else {
-					MarketOrder[market].SellOpening = false
-					MarketOrder[market].SellOrderUUID = ""
+
 					session := mydb.Session.Clone()
 					e := session.DB("v4").C("OrderBooks").With(session)
-					e.Insert(&LogOrderBook{   Market:market, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "buy signal bid price down cancel sell"})
+					e.Insert(&LogOrderBook{ UUID:MarketOrder[market].SellOrderUUID ,   Market:market, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "buy signal bid price down cancel sell"})
 					session.Close()
+					MarketOrder[market].SellOpening = false
+					MarketOrder[market].SellOrderUUID = ""
 
 					sellrate := ticker.Ask
 					buyrate := ticker.Bid
@@ -575,7 +579,7 @@ func BuySellMarkets(market string,  bidPrice, askPrice float64)  {
 					MarketOrder[market].CheckingSell = MarketOrder[market].SellOrderUUID
 					go SellMarket(market, bidPrice )
 				}
-				if !(MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != "" ) && MarketOrder[market].CheckingSell == "" && !(MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "") && MarketOrder[market].CheckingBuy == "" {
+				if !(MarketOrder[market].SellOpening && MarketOrder[market].SellOrderUUID != "") && MarketOrder[market].CheckingSell == "" && !(MarketOrder[market].BuyOpening && MarketOrder[market].BuyOrderUUID != "") && MarketOrder[market].CheckingBuy == "" {
 					break
 				}
 			}
@@ -659,13 +663,14 @@ func CheckOrder(uuid string)(orderTime time.Time, status bool){
 						e.Insert(&db.ErrorLog{Description:"Cancel Order Partial buy API - "+order.Exchange, Error:err3.Error(), Time:time.Now()})
 						session.Close()
 					}else {
-						MarketOrder[order.Exchange].BuyOrderUUID = ""
-						MarketOrder[order.Exchange].BuyOpening = false
+
 						status = false
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("OrderBooks").With(session)
-						e.Insert(&LogOrderBook{   Market:order.Exchange, LogTime: time.Now(), OrderType: "Cancel Buy", Remark: "partially buy exist 30 min cancel buy"})
+						e.Insert(&LogOrderBook{  UUID:MarketOrder[order.Exchange].BuyOrderUUID , Market:order.Exchange, LogTime: time.Now(), OrderType: "Cancel Buy", Remark: "partially buy exist 30 min cancel buy"})
 						session.Close()
+						MarketOrder[order.Exchange].BuyOrderUUID = ""
+						MarketOrder[order.Exchange].BuyOpening = false
 					}
 				}
 			}else {
@@ -677,13 +682,14 @@ func CheckOrder(uuid string)(orderTime time.Time, status bool){
 						e.Insert(&db.ErrorLog{Description:"Cancel Order Partial sell API - "+order.Exchange, Error:err3.Error(), Time:time.Now()})
 						session.Close()
 					}else {
-						MarketOrder[order.Exchange].SellOrderUUID = ""
-						MarketOrder[order.Exchange].SellOpening = false
+
 						status = false
 						session := mydb.Session.Clone()
 						e := session.DB("v4").C("OrderBooks").With(session)
-						e.Insert(&LogOrderBook{  Market:order.Exchange, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "partially sell exist 30 min cancel sell"})
+						e.Insert(&LogOrderBook{UUID: MarketOrder[order.Exchange].SellOrderUUID,   Market:order.Exchange, LogTime: time.Now(), OrderType: "Cancel Sell", Remark: "partially sell exist 30 min cancel sell"})
 						session.Close()
+						MarketOrder[order.Exchange].SellOrderUUID = ""
+						MarketOrder[order.Exchange].SellOpening = false
 					}
 				}
 			}

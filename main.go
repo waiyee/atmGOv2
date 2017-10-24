@@ -228,7 +228,7 @@ func SetupOpeningOrder()  {
 						MarketOrder[v.Exchange].CheckingSell = MarketOrder[v.Exchange].SellOrderUUID
 						go SellMarket(v.Exchange, v.Price )
 					}
-					if !(MarketOrder[v.Exchange].SellOpening && MarketOrder[v.Exchange].SellOrderUUID != ""&& MarketOrder[v.Exchange].CheckingBuy == "") && !(MarketOrder[v.Exchange].BuyOpening && MarketOrder[v.Exchange].BuyOrderUUID != "" && MarketOrder[v.Exchange].CheckingSell == "") {
+					if !(MarketOrder[v.Exchange].SellOpening && MarketOrder[v.Exchange].SellOrderUUID != "" ) && MarketOrder[v.Exchange].CheckingBuy == "" && !(MarketOrder[v.Exchange].BuyOpening && MarketOrder[v.Exchange].BuyOrderUUID != "") && MarketOrder[v.Exchange].CheckingSell == "" {
 						break
 					}
 				}

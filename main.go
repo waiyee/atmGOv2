@@ -198,6 +198,16 @@ func SetupOpeningOrder()  {
 		e.Insert(&db.ErrorLog{Description:"SetupOpeningOrder  - API", Error:err.Error(), Time:time.Now()})
 	}else {
 		for _,v := range orders {
+			var ticker bittrex.Ticker
+			var err2 error
+			ticker, err2 = bAPI.GetTicker(v.Exchange)
+			for err != nil {
+				session := mydb.Session.Clone()
+				defer session.Close()
+				e := session.DB("v4").C("ErrorLog").With(session)
+				e.Insert(&db.ErrorLog{Description: "Get Ticker SetupOpeningOrder API - "+v.Exchange, Error: err2.Error(), Time: time.Now()})
+				ticker, err2 = bAPI.GetTicker(v.Exchange)
+			}
 
 			if v.OrderType == "LIMIT_BUY" {
 				MarketOrder[v.Exchange].BuyOrderUUID = v.OrderUuid
@@ -206,6 +216,23 @@ func SetupOpeningOrder()  {
 				MarketOrder[v.Exchange].SellOrderUUID = v.OrderUuid
 				MarketOrder[v.Exchange].SellOpening = true
 			}
+			askPrice := ticker.Ask - satoshi
+			go func() {
+				for range time.NewTicker(time.Millisecond * 150).C {
+					if MarketOrder[v.Exchange].BuyOpening && MarketOrder[v.Exchange].BuyOrderUUID != "" && MarketOrder[v.Exchange].CheckingBuy == ""  {
+
+						MarketOrder[v.Exchange].CheckingBuy = MarketOrder[v.Exchange].BuyOrderUUID
+						go BuyMarket(v.Exchange, v.Price , askPrice)
+					}
+					if MarketOrder[v.Exchange].SellOpening && MarketOrder[v.Exchange].SellOrderUUID != "" && MarketOrder[v.Exchange].CheckingSell == ""{
+						MarketOrder[v.Exchange].CheckingSell = MarketOrder[v.Exchange].SellOrderUUID
+						go SellMarket(v.Exchange, v.Price )
+					}
+					if !(MarketOrder[v.Exchange].SellOpening && MarketOrder[v.Exchange].SellOrderUUID != ""&& MarketOrder[v.Exchange].CheckingBuy == "") && !(MarketOrder[v.Exchange].BuyOpening && MarketOrder[v.Exchange].BuyOrderUUID != "" && MarketOrder[v.Exchange].CheckingSell == "") {
+						break
+					}
+				}
+			}()
 		}
 
 	}

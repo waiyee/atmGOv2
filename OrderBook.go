@@ -251,7 +251,7 @@ func periodicGetOrderBook(t time.Time, markets []string)  {
 					temp = val.Wallet
 				}
 				MyOwnWallet["BTC"].Lock.Lock()
-				if final > FinalThresold && Spread > SpreadThresold && temp.Available == 0 && MyOwnWallet["BTC"].Wallet.Available >= minTotal && !MarketOrder[markets[i]].BuyOpening {
+				if final > FinalThresold && Spread > SpreadThresold && temp.Available == 0 && MyOwnWallet["BTC"].Wallet.Available >= minTotal && !MarketOrder[markets[i]].BuyOpening && !MarketOrder[markets[i]].SellOpening {
 					go BuySellMarkets(markets[i], orderBook.Buy[0].Rate + satoshi , orderBook.Sell[0].Rate - satoshi)
 				}
 				MyOwnWallet["BTC"].Lock.Unlock()

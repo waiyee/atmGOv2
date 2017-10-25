@@ -46,6 +46,10 @@ type MarketOrderDetail struct {
 	SellOpening	bool
 	CheckingBuy string
 	CheckingSell string
+	BuyBidPrice	float64
+	BuyAskPrice	float64
+	SellBidPrice float64
+	SellAskPrice float64
 	Lock sync.Mutex
 }
 
@@ -210,11 +214,19 @@ func SetupOpeningOrder()  {
 			}
 
 			if v.OrderType == "LIMIT_BUY" {
+				MarketOrder[v.Exchange].Lock.Lock()
+				MarketOrder[v.Exchange].BuyAskPrice = ticker.Ask
+				MarketOrder[v.Exchange].BuyBidPrice = ticker.Bid
 				MarketOrder[v.Exchange].BuyOrderUUID = v.OrderUuid
 				MarketOrder[v.Exchange].BuyOpening = true
+				MarketOrder[v.Exchange].Lock.Unlock()
 			}else{
+				MarketOrder[v.Exchange].Lock.Lock()
+				MarketOrder[v.Exchange].SellAskPrice = ticker.Ask
+				MarketOrder[v.Exchange].SellBidPrice = ticker.Bid
 				MarketOrder[v.Exchange].SellOrderUUID = v.OrderUuid
 				MarketOrder[v.Exchange].SellOpening = true
+				MarketOrder[v.Exchange].Lock.Unlock()
 			}
 			askPrice := ticker.Ask - satoshi
 			go func() {
